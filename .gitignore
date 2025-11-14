@@ -1,0 +1,22 @@
+# Thư mục dữ liệu (Rất lớn, không đưa lên Git)
+data/
+datasets/
+
+# Thư mục đầu ra (Model, logs - Được tạo ra khi chạy code)
+outputs/
+
+# Các file cache của Python (Luôn luôn ignore)
+__pycache__/
+*.pyc
+*.pyo
+
+# Checkpoints của Jupyter Notebook
+.ipynb_checkpoints/
+
+# Cài đặt riêng của VS Code
+.vscode/
+
+# Thư mục môi trường ảo (Nếu bạn tạo trong dự án)
+venv/
+.venv/
+env/
