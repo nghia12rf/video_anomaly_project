@@ -1,13 +1,7 @@
-torch
-torchvision
-torchaudio
-opencv-python
-opencv-contrib-python
 numpy
+opencv-python
 matplotlib
+tensorflow
+imutils
+playsound
 scikit-learn
-scikit-image
-scipy
-pillow
-tqdm
-pandas
