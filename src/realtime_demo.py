@@ -11,10 +11,10 @@ THRESHOLD_PATH = os.path.join("outputs", "models", "threshold.txt")
 
 # Chọn video để test (Bạn có thể đổi đường dẫn này)
 # Ví dụ UCSD (Test001 chứa người đi xe đạp - Bất thường)
-TEST_DATA_PATH = os.path.join("data", "ucsd", "test", "Test001") 
+TEST_DATA_PATH = os.path.join("data", "ucsd", "test", "Test002") 
 
 # Nếu muốn test Avenue (Video file)
-# TEST_DATA_PATH = os.path.join("data", "avenue", "test", "01.avi")
+#TEST_DATA_PATH = os.path.join("data", "avenue", "test", "20.avi")
 
 def play_sound_alert():
     # Hàm phát tiếng kêu 'Beep' của hệ thống (Windows)
@@ -79,6 +79,7 @@ def main():
         # 2. Predict & Tính lỗi
         reconstructed = model.predict(input_data, verbose=0)
         mse = np.mean(np.square(input_data - reconstructed))
+        print(f"Frame: {idx} | Error: {mse:.6f} | Threshold: {threshold:.6f}")
         
         # 3. So sánh với Ngưỡng
         label = "BINH THUONG"
@@ -87,7 +88,7 @@ def main():
         if mse > threshold:
             label = "CANH BAO: BAT THUONG!"
             color = (0, 0, 255) # Đỏ
-            # play_sound_alert() # Bỏ comment dòng này nếu muốn nghe tiếng kêu
+            play_sound_alert() # Bỏ comment dòng này nếu muốn nghe tiếng kêu
             
         # 4. Vẽ lên màn hình
         cv2.rectangle(display_frame, (0, 0), (display_frame.shape[1], 40), (0, 0, 0), -1)

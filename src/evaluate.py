@@ -6,6 +6,7 @@ from dataset import get_training_data
 
 # --- CẤU HÌNH ---
 DATA_PATH = os.path.join("data", "ucsd", "train")
+#DATA_PATH = os.path.join("data", "avenue", "train")
 MODEL_PATH = os.path.join("outputs", "models", "anomaly_detector.h5")
 THRESHOLD_PATH = os.path.join("outputs", "models", "threshold.txt")
 HISTOGRAM_PATH = os.path.join("outputs", "logs", "error_histogram.png")

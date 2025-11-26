@@ -8,12 +8,13 @@ from autoencoder import build_autoencoder
 # --- CẤU HÌNH ---
 # Đường dẫn dữ liệu (Bạn kiểm tra lại xem đúng folder chưa nhé)
 DATA_PATH = os.path.join("data", "ucsd", "train") 
+#DATA_PATH = os.path.join("data", "avenue", "train")
 MODEL_SAVE_PATH = os.path.join("outputs", "models", "anomaly_detector.h5")
 PLOT_SAVE_PATH = os.path.join("outputs", "logs", "training_plot.png")
 
 # Tham số huấn luyện
 # Để test nhanh thì để EPOCHS nhỏ (ví dụ 2). Khi train thật thì tăng lên 20-50.
-EPOCHS = 10 
+EPOCHS = 30 
 BATCH_SIZE = 32
 
 def train():
