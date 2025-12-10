@@ -14,7 +14,7 @@ PLOT_SAVE_PATH = os.path.join("outputs", "logs", "training_plot.png")
 
 # Tham số huấn luyện
 # Để test nhanh thì để EPOCHS nhỏ (ví dụ 2). Khi train thật thì tăng lên 20-50.
-EPOCHS = 30 
+EPOCHS = 10 
 BATCH_SIZE = 32
 
 def train():
