@@ -124,8 +124,6 @@ A: Có thể giảm kích thước khung hình hoặc sử dụng GPU để tăn
 
 ```
 
-=======
-
 # Hệ Thống Phát Hiện Hành Vi Bất Thường Trong Video Giám Sát
 
 ## 📌 Giới thiệu
