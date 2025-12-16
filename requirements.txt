@@ -5,3 +5,7 @@ tensorflow
 imutils
 playsound
 scikit-learn
+gradio
+moviepy
+winsound
+tqdm

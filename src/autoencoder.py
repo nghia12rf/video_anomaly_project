@@ -1,55 +1,44 @@
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, UpSampling2D, Input, BatchNormalization
-from tensorflow.keras.models import Model
-import numpy as np
+from tensorflow.keras.layers import Conv3D, ConvLSTM2D, Conv3DTranspose, Input, BatchNormalization, TimeDistributed
+from tensorflow.keras.models import Model, Sequential
 
-def build_autoencoder(input_shape=(128, 128, 1)):
+def build_autoencoder(input_shape=(10, 128, 128, 1)):
     """
-    Xây dựng Convolutional Autoencoder.
-    Input: (128, 128, 1) -> Output: (128, 128, 1)
+    Spatiotemporal Autoencoder.
+    Input: (Batch, 10, 128, 128, 1) -> Output: (Batch, 10, 128, 128, 1)
     """
-    # --- ENCODER (Nén dữ liệu) ---
-    input_img = Input(shape=input_shape)
-    
-    # Block 1: 128 -> 64
-    x = Conv2D(32, (3, 3), activation='relu', padding='same')(input_img)
-    x = BatchNormalization()(x)
-    x = MaxPooling2D((2, 2), padding='same')(x)
-    
-    # Block 2: 64 -> 32
-    x = Conv2D(16, (3, 3), activation='relu', padding='same')(x)
-    x = BatchNormalization()(x)
-    encoded = MaxPooling2D((2, 2), padding='same')(x)
+    model = Sequential()
 
-    # --- DECODER (Tái tạo dữ liệu) ---
+    # --- ENCODER (Trích xuất đặc trưng không gian + thời gian) ---
+    # Conv3D giúp bắt chuyển động cơ bản
+    model.add(Conv3D(filters=32, kernel_size=(3, 3, 3), strides=(1, 2, 2), 
+                     padding='same', activation='relu', input_shape=input_shape))
+    # Output: (10, 64, 64, 32)
+    model.add(BatchNormalization())
     
-    # Block 3: 32 -> 64
-    x = Conv2D(16, (3, 3), activation='relu', padding='same')(encoded)
-    x = BatchNormalization()(x)
-    x = UpSampling2D((2, 2))(x)
-    
-    # Block 4: 64 -> 128
-    x = Conv2D(32, (3, 3), activation='relu', padding='same')(x)
-    x = BatchNormalization()(x)
-    x = UpSampling2D((2, 2))(x)
-    
-    # Output Layer: Trả về ảnh gốc (dùng Sigmoid để giá trị về 0-1)
-    decoded = Conv2D(1, (3, 3), activation='sigmoid', padding='same')(x)
+    # ConvLSTM2D layer 1: Học chuỗi
+    model.add(ConvLSTM2D(filters=16, kernel_size=(3, 3), padding='same', return_sequences=True))
+    # Output: (10, 64, 64, 16)
+    model.add(BatchNormalization())
 
-    # Tạo Model
-    autoencoder = Model(input_img, decoded)
+    # --- DECODER (Tái tạo lại video) ---
+    # ConvLSTM2D layer 2: Giải mã chuỗi
+    model.add(ConvLSTM2D(filters=16, kernel_size=(3, 3), padding='same', return_sequences=True))
+    # Output: (10, 64, 64, 16)
+    model.add(BatchNormalization())
     
-    # Compile Model (Dùng MSE Loss để đo độ sai lệch giữa ảnh gốc và ảnh tái tạo)
-    autoencoder.compile(optimizer='adam', loss='mse')
+    # Conv3DTranspose: Phóng to lại kích thước ảnh (Upsample spatial)
+    model.add(Conv3DTranspose(filters=32, kernel_size=(3, 3, 3), strides=(1, 2, 2), 
+                              padding='same', activation='relu'))
+    # Output: (10, 128, 128, 32)
     
-    return autoencoder
+    # Output Layer: Trả về ảnh gốc
+    model.add(Conv3DTranspose(filters=1, kernel_size=(3, 3, 3), padding='same', activation='sigmoid'))
+    # Output: (10, 128, 128, 1)
 
-# --- Test Block ---
+    model.compile(optimizer='adam', loss='mse')
+    return model
+
 if __name__ == "__main__":
-    print("--- ĐANG KIỂM TRA KIẾN TRÚC MODEL ---")
-    try:
-        model = build_autoencoder()
-        model.summary() # In ra cấu trúc mạng
-        print("\n[OK] Model đã được xây dựng thành công!")
-    except Exception as e:
-        print(f"\n[ERROR] Lỗi xây dựng model: {e}")
-        print("Gợi ý: Kiểm tra xem đã cài tensorflow chưa (pip install tensorflow)")
+    model = build_autoencoder()
+    model.summary()
+    print("[OK] Spatiotemporal Model ready.")

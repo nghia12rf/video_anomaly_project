@@ -1,112 +1,157 @@
+import os
+# Tắt log rác của TensorFlow
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import cv2
 import numpy as np
-import os
 import glob
-import time
+from collections import deque
 from tensorflow.keras.models import load_model
 
-# --- CẤU HÌNH ---
-MODEL_PATH = os.path.join("outputs", "models", "anomaly_detector.h5")
-THRESHOLD_PATH = os.path.join("outputs", "models", "threshold.txt")
+# --- CẤU HÌNH ĐƯỜNG DẪN ---
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_PATH = os.path.join(BASE_DIR, "outputs", "models", "st_autoencoder.h5")
+THRESHOLD_PATH = os.path.join(BASE_DIR, "outputs", "models", "threshold.txt")
+TEST_DATA_PATH = os.path.join(BASE_DIR, "data", "ucsd", "test", "Test004") 
 
-# Chọn video để test (Bạn có thể đổi đường dẫn này)
-# Ví dụ UCSD (Test001 chứa người đi xe đạp - Bất thường)
-TEST_DATA_PATH = os.path.join("data", "ucsd", "test", "Test002") 
+# [THÊM] Hàm phát âm thanh an toàn (chỉ chạy trên Windows)
+def play_sound():
+    try:
+        import winsound
+        # Tần số 1000Hz, độ dài 100ms (ngắn để không bị giật lag video)
+        winsound.Beep(1000, 100) 
+    except ImportError:
+        pass 
 
-# Nếu muốn test Avenue (Video file)
-#TEST_DATA_PATH = os.path.join("data", "avenue", "test", "20.avi")
-
-def play_sound_alert():
-    # Hàm phát tiếng kêu 'Beep' của hệ thống (Windows)
-    import winsound
-    winsound.Beep(1000, 200) # Tần số 1000Hz, 200ms
+def nothing(x):
+    pass
 
 def main():
     # 1. Load Ngưỡng
-    if not os.path.exists(THRESHOLD_PATH):
-        print("[ERROR] Chưa có file ngưỡng (threshold.txt). Chạy evaluate.py trước!")
-        return
-    with open(THRESHOLD_PATH, "r") as f:
-        threshold = float(f.read())
-    print(f"[INFO] Đã load ngưỡng: {threshold}")
+    threshold = 0.0005 
+    if os.path.exists(THRESHOLD_PATH):
+        with open(THRESHOLD_PATH, "r") as f:
+            try: threshold = float(f.read())
+            except: pass
+    print(f"Ngưỡng gốc từ file: {threshold:.8f}")
 
-    # 2. Load Model (Thêm compile=False để tránh lỗi version)
-    print("[INFO] Đang tải model...")
+    print("Loading model...")
+    if not os.path.exists(MODEL_PATH):
+        print("Lỗi: Không tìm thấy model!")
+        return
     model = load_model(MODEL_PATH, compile=False)
 
-    # 3. Chuẩn bị nguồn video (Hỗ trợ cả Folder ảnh UCSD và Video file)
-    frames = []
+    frames_list = []
     is_video_file = False
-    
     if os.path.isdir(TEST_DATA_PATH):
-        # Nếu là folder (UCSD)
-        image_paths = sorted(glob.glob(os.path.join(TEST_DATA_PATH, "*.tif")) + 
+        frames_list = sorted(glob.glob(os.path.join(TEST_DATA_PATH, "*.tif")) + 
                              glob.glob(os.path.join(TEST_DATA_PATH, "*.jpg")))
-        print(f"[INFO] Đang chạy demo trên folder ảnh: {len(image_paths)} frames")
-        # Đọc trước các đường dẫn
-        frames = image_paths
     else:
-        # Nếu là file video (Avenue)
-        print(f"[INFO] Đang chạy demo trên video file.")
         is_video_file = True
         cap = cv2.VideoCapture(TEST_DATA_PATH)
 
-    # 4. Vòng lặp xử lý Realtime
+    cv2.namedWindow("Spatiotemporal Detection")
+    cv2.namedWindow("Difference Map (Amplified)") 
+    
+    # Thanh trượt độ mịn cao (1 triệu đơn vị)
+    scale_factor = 1000000
+    init_val = int(threshold * scale_factor)
+    
+    cv2.createTrackbar("Threshold (x1M)", "Spatiotemporal Detection", init_val, 1000, nothing)
+    cv2.createTrackbar("Amplify", "Difference Map (Amplified)", 30, 100, nothing)
+
+    clip_buffer = deque(maxlen=10) 
+    
     idx = 0
     while True:
-        # Đọc frame
         if is_video_file:
             ret, frame = cap.read()
             if not ret: break
         else:
-            if idx >= len(frames): break
-            frame = cv2.imread(frames[idx])
+            if idx >= len(frames_list): break
+            frame = cv2.imread(frames_list[idx])
             idx += 1
-            
+        
         if frame is None: break
 
-        # Resize để hiển thị cho đẹp (zoom lên x2)
-        display_frame = cv2.resize(frame, (0, 0), fx=2, fy=2)
-        
-        # --- XỬ LÝ MODEL ---
-        # 1. Tiền xử lý (giống hệt lúc train)
+        display_frame = frame.copy()
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray_resized = cv2.resize(gray, (128, 128))
-        input_data = gray_resized.astype("float32") / 255.0
-        input_data = np.expand_dims(input_data, axis=0)     # (1, 128, 128)
-        input_data = np.expand_dims(input_data, axis=-1)    # (1, 128, 128, 1)
+        gray_small = cv2.resize(gray, (64, 64))
         
-        # 2. Predict & Tính lỗi
-        reconstructed = model.predict(input_data, verbose=0)
-        mse = np.mean(np.square(input_data - reconstructed))
-        print(f"Frame: {idx} | Error: {mse:.6f} | Threshold: {threshold:.6f}")
+        norm = gray_small.astype("float32") / 255.0
+        norm = np.expand_dims(norm, axis=-1) 
+
+        clip_buffer.append(norm)
+
+        label = "Dang thu thap..."
+        color = (255, 255, 0)
+        mse = 0
+        boxes = []
+        is_alarm = False
+        debug_final = np.zeros((200, 400), dtype=np.uint8)
+
+        trackbar_val = cv2.getTrackbarPos("Threshold (x1M)", "Spatiotemporal Detection")
+        amp_val = cv2.getTrackbarPos("Amplify", "Difference Map (Amplified)")
+        if amp_val < 1: amp_val = 1
         
-        # 3. So sánh với Ngưỡng
-        label = "BINH THUONG"
-        color = (0, 255, 0) # Xanh lá
-        
-        if mse > threshold:
-            label = "CANH BAO: BAT THUONG!"
-            color = (0, 0, 255) # Đỏ
-            play_sound_alert() # Bỏ comment dòng này nếu muốn nghe tiếng kêu
+        current_threshold = trackbar_val / float(scale_factor) if trackbar_val > 0 else threshold
+
+        if len(clip_buffer) == 10:
+            input_clip = np.array(clip_buffer)
+            input_clip = np.expand_dims(input_clip, axis=0)
             
-        # 4. Vẽ lên màn hình
-        cv2.rectangle(display_frame, (0, 0), (display_frame.shape[1], 40), (0, 0, 0), -1)
-        cv2.putText(display_frame, f"{label}", (10, 30), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-        cv2.putText(display_frame, f"Error: {mse:.5f} | Threshold: {threshold:.5f}", (10, display_frame.shape[0] - 10), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+            reconstructed = model.predict(input_clip, verbose=0)
+            diff = np.abs(input_clip - reconstructed)
+            mse = np.mean(np.square(diff)) 
+            
+            # --- Xử lý ảnh lỗi ---
+            err_map = diff[0, -1, :, :, 0] 
+            err_amplified = err_map * amp_val * 255
+            err_img = np.clip(err_amplified, 0, 255).astype(np.uint8)
+            
+            _, thresh_img = cv2.threshold(err_img, 50, 255, cv2.THRESH_BINARY)
+            
+            kernel = np.ones((3, 3), np.uint8)
+            thresh_img = cv2.morphologyEx(thresh_img, cv2.MORPH_OPEN, kernel, iterations=1)
+            thresh_img = cv2.dilate(thresh_img, kernel, iterations=2)
+            
+            debug_img = cv2.resize(err_img, (200, 200), interpolation=cv2.INTER_NEAREST)
+            debug_thresh = cv2.resize(thresh_img, (200, 200), interpolation=cv2.INTER_NEAREST)
+            debug_final = cv2.hconcat([debug_img, debug_thresh])
 
-        # 5. Hiển thị
-        cv2.imshow("Video Giam Sat (Nhan Q de thoat)", display_frame)
+            cnts, _ = cv2.findContours(thresh_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            scale_x = display_frame.shape[1] / 64
+            scale_y = display_frame.shape[0] / 64
+            
+            for c in cnts:
+                if cv2.contourArea(c) > 15: 
+                    x, y, w, h = cv2.boundingRect(c)
+                    boxes.append((int(x * scale_x), int(y * scale_y), 
+                                  int(w * scale_x), int(h * scale_y)))
+
+            if mse > current_threshold:
+                label = "BAT THUONG!"
+                color = (0, 0, 255)
+                is_alarm = True
+                
+                # [THÊM] Gọi hàm phát âm thanh khi có báo động
+                play_sound() 
+            else:
+                label = "Binh thuong"
+                color = (0, 255, 0)
+
+        # Draw info
+        cv2.putText(display_frame, f"{label}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+        cv2.putText(display_frame, f"MSE: {mse:.6f}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 1)
+        cv2.putText(display_frame, f"Thresh: {current_threshold:.6f}", (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
         
-        # Hiện thêm ảnh tái tạo (để so sánh)
-        recon_img = (reconstructed[0, :, :, 0] * 255).astype("uint8")
-        cv2.imshow("AI 'Tuong tuong'", cv2.resize(recon_img, (200, 200)))
+        for (x, y, w, h) in boxes:
+            box_color = (0, 0, 255) if is_alarm else (0, 255, 255)
+            cv2.rectangle(display_frame, (x, y), (x + w, y + h), box_color, 2)
 
-        # Chờ 30ms (giả lập tốc độ video), nhấn Q để thoát
-        if cv2.waitKey(30) & 0xFF == ord('q'):
-            break
+        cv2.imshow("Spatiotemporal Detection", display_frame)
+        cv2.imshow("Difference Map (Amplified)", debug_final) 
+        
+        if cv2.waitKey(30) & 0xFF == ord('q'): break
 
     if is_video_file: cap.release()
     cv2.destroyAllWindows()
